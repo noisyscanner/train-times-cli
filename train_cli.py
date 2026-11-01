@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import typer
 import requests
 import json
@@ -38,6 +40,62 @@ def format_time(ts: str) -> str:
     if not ts:
         return "-"
     return ts
+
+def delay_style(std: str, etd: str) -> Optional[str]:
+    """Row style: yellow if <10 mins late, red if 10+ (or unknown), dark red if cancelled."""
+    if etd == "Cancelled":
+        return "dark_red"
+    if etd == "Delayed":
+        return "red"
+    try:
+        scheduled = datetime.strptime(std, "%H:%M")
+        expected = datetime.strptime(etd, "%H:%M")
+    except ValueError:
+        return None  # "On time", blank, etc.
+    delay = (expected - scheduled).total_seconds() / 60
+    if delay < -6 * 60:
+        delay += 24 * 60  # Expected time crossed midnight
+    if delay <= 0:
+        return None
+    return "yellow" if delay < 10 else "red"
+
+def status_icon(etd: str, row_style: Optional[str]) -> Optional[str]:
+    """Plain symbols (not emoji) so they keep the row colour and a single-cell width."""
+    if etd == "Cancelled":
+        return "✗"
+    if row_style:
+        return "!"
+    return None
+
+def resolve_station(query: str) -> str:
+    """Turn a CRS code or station name (e.g. 'Bristol Parkway') into a CRS code."""
+    query = query.strip()
+    if len(query) == 3 and query.isalpha():
+        return query.upper()
+
+    try:
+        resp = requests.get(f"{HUXLEY_BASE}/crs/{requests.utils.quote(query)}", timeout=10)
+        resp.raise_for_status()
+        matches = resp.json()
+    except (requests.exceptions.RequestException, ValueError) as e:
+        console.print(f"[bold red]Couldn't look up station '{query}': {e}[/bold red]")
+        raise typer.Exit(1)
+
+    exact = [m for m in matches if m.get("stationName", "").lower() == query.lower()]
+    if exact:
+        return exact[0]["crsCode"]
+    if len(matches) == 1:
+        return matches[0]["crsCode"]
+    if not matches:
+        console.print(f"[bold red]No station found matching '{query}'.[/bold red]")
+        raise typer.Exit(1)
+
+    console.print(f"[bold red]'{query}' matches {len(matches)} stations — be more specific or use a CRS code:[/bold red]")
+    for m in matches[:5]:
+        console.print(f"  {m['crsCode']}  {m['stationName']}")
+    if len(matches) > 5:
+        console.print(f"  ...and {len(matches) - 5} more")
+    raise typer.Exit(1)
 
 @app.command()
 def tube():
@@ -82,15 +140,15 @@ def tube():
 
 @app.command()
 def live(
-    start: str = typer.Argument(..., help="Start station CRS code (e.g. VIC)"),
-    dest: str = typer.Argument(None, help="Optional destination CRS code (e.g. BTN)"),
+    start: str = typer.Argument(..., help="Start station CRS code or name (e.g. VIC or \"London Victoria\")"),
+    dest: str = typer.Argument(None, help="Optional destination CRS code or name (e.g. BTN or Brighton)"),
     allow: int = typer.Option(0, "--allow", "-a", help="Travel buffer: allow X minutes travel to station, don't show trains before this.")
 ):
     """
     Fetch the live departure board for a station.
     """
-    start = start.upper()
-    dest = dest.upper() if dest else None
+    start = resolve_station(start)
+    dest = resolve_station(dest) if dest else None
     
     with get_status(f"[bold blue]Fetching live departures from {start}..."):
         if dest:
@@ -155,7 +213,9 @@ def live(
             table.add_column("Arr")
         table.add_column("Dest")
     else:
-        table = Table(title=f"Live Departures: {data.get('locationName')} " + (f"to {dest}" if dest else ""))
+        dest_title = data.get("filterLocationName") or dest
+        board_time = datetime.now().strftime("%H:%M")
+        table = Table(title=f"Live Departures at [blue]{board_time}[/blue]: {data.get('locationName')} ({start}) " + (f"to {dest_title} ({dest})" if dest else ""))
         table.add_column("Expected", style="cyan")
         table.add_column("Scheduled", style="blue")
         table.add_column("Destination", style="magenta")
@@ -221,12 +281,14 @@ def live(
                 row = [time_display, arr_disp, dest_name[:10]]
             else:
                 row = [time_display, dest_name[:14]]
-        else:
-            row = [etd, std, dest_name, plat]
+        row_style = delay_style(std, etd)
+        if not is_piped:
+            icon = status_icon(etd, row_style)
+            row = [f"{icon} {etd}" if icon else etd, std, dest_name, plat]
             if dest:
                 row.append(arrival_time)
-            
-        table.add_row(*row)
+
+        table.add_row(*row, style=row_style)
         count += 1
         if count >= 5:
             break
@@ -239,8 +301,8 @@ def live(
 
 @app.command()
 def journey(
-    start: str = typer.Argument(..., help="Start station CRS code (e.g. VIC)"),
-    dest: str = typer.Argument(..., help="Destination CRS code (e.g. BTN)"),
+    start: str = typer.Argument(..., help="Start station CRS code or name (e.g. VIC or \"London Victoria\")"),
+    dest: str = typer.Argument(..., help="Destination CRS code or name (e.g. BTN or Brighton)"),
     date: str = typer.Option("today", help="Date in DDMMYY, 'today', or 'tomorrow'"),
     time: str = typer.Option(None, help="Time in HHMM (e.g., 1800). Defaults to now."),
     leave: bool = typer.Option(True, "--leave/--arrive", help="Whether time specified is leaving at or arriving by"),
@@ -249,9 +311,9 @@ def journey(
     """
     Plan a journey and see times matching a specific date/time.
     """
-    start = start.upper()
-    dest = dest.upper()
-    
+    start = resolve_station(start)
+    dest = resolve_station(dest)
+
     if not time:
         time = datetime.now().strftime("%H%M")
         

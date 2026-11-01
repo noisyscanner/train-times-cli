@@ -50,6 +50,9 @@ python train_cli.py live HPD VIC
 
 # Add a 10 Minute walking buffer so we don't sprint to a train we can't make!
 python train_cli.py live HPD VIC -a 10 
+
+# Station names work too (quote multi-word names)
+python train_cli.py live "Bristol Parkway" "Bristol Temple Meads"
 ```
 
 ### 2. Journey Planner
@@ -120,10 +123,11 @@ Usage: train_cli.py live [OPTIONS] START [DEST]
  Fetch the live departure board for a station.                  
                                                                 
 ╭─ Arguments ──────────────────────────────────────────────────╮
-│ *    start      TEXT    Start station CRS code (e.g. VIC)    │
+│ *    start      TEXT    Start station CRS code or name (e.g. │
+│                         VIC or "London Victoria")            │
 │                         [required]                           │
-│      dest       [DEST]  Optional destination CRS code (e.g.  │
-│                         BTN)                                 │
+│      dest       [DEST]  Optional destination CRS code or     │
+│                         name (e.g. BTN or Brighton)          │
 ╰──────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────╮
 │ --allow  -a      INTEGER  Travel buffer: allow X minutes     │
@@ -140,6 +144,9 @@ python train_cli.py live HPD VIC
 
 # Add a 10 Minute walking buffer so we don't sprint to a train we can't make!
 python train_cli.py live HPD VIC -a 10 
+
+# Station names work too (quote multi-word names)
+python train_cli.py live "Bristol Parkway" "Bristol Temple Meads"
 ```
 
 ### 2. Journey Planner (`journey`)
@@ -151,9 +158,11 @@ Usage: train_cli.py journey [OPTIONS] START DEST
  Plan a journey and see times matching a specific date/time.    
                                                                 
 ╭─ Arguments ──────────────────────────────────────────────────╮
-│ *    start      TEXT  Start station CRS code (e.g. VIC)      │
+│ *    start      TEXT  Start station CRS code or name (e.g.   │
+│                       VIC or "London Victoria")              │
 │                       [required]                             │
-│ *    dest       TEXT  Destination CRS code (e.g. BTN)        │
+│ *    dest       TEXT  Destination CRS code or name (e.g. BTN │
+│                       or Brighton)                           │
 │                       [required]                             │
 ╰──────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────╮
