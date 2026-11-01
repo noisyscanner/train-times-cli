@@ -14,7 +14,15 @@ What makes this project special? It was meticulously designed to **support perfe
 
 ## 📦 Installation
 
-This CLI requires **Python 3**.
+This CLI requires **Python 3.10+**.
+
+**Quick install** (puts a `trains` command in `~/.local/bin`, with its own venv under `~/.local/share/train-times-cli`):
+```bash
+make install      # make uninstall to remove; make help for options
+trains live HPD VIC
+```
+
+**Manual setup** for development:
 
 1. **Clone the repository:**
    ```bash
